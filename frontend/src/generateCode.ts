@@ -3,13 +3,14 @@ import { WS_BACKEND_URL } from "./config";
 import { USER_CLOSE_WEB_SOCKET_CODE } from "./constants";
 
 const ERROR_MESSAGE =
-  "Error generating code. Check the Developer Console for details. Feel free to open a Github issue";
+  "Error generating code. Check the Developer Console AND the backend logs for details. Feel free to open a Github issue.";
 
 const STOP_MESSAGE = "Code generation stopped";
 
 export interface CodeGenerationParams {
   generationType: "create" | "update";
   image: string;
+  resultImage?: string;
   history?: string[];
   // isImageGenerationEnabled: boolean; // TODO: Merge with Settings type in types.ts
 }
@@ -49,14 +50,11 @@ export function generateCode(
     console.log("Connection closed", event.code, event.reason);
     if (event.code === USER_CLOSE_WEB_SOCKET_CODE) {
       toast.success(STOP_MESSAGE);
-      onComplete();
-    } else if (event.code === 1000) {
-      onComplete();
-    } else {
+    } else if (event.code !== 1000) {
       console.error("WebSocket error code", event);
       toast.error(ERROR_MESSAGE);
-      onComplete();
     }
+    onComplete();
   });
 
   ws.addEventListener("error", (error) => {
