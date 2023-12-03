@@ -1,3 +1,5 @@
+from prompts import assemble_prompt
+
 TAILWIND_SYSTEM_PROMPT = """
 You are an expert Tailwind developer
 You take screenshots of a reference web page from the user, and then build single page apps 
@@ -111,54 +113,24 @@ Return only the full code in <html></html> tags.
 Do not include markdown "```" or "```html" at the start or end.
 """
 
-USER_PROMPT = """
-Generate code for a web page that looks exactly like this.
-"""
 
+def test_prompts():
+    tailwind_prompt = assemble_prompt(
+        "image_data_url", "html_tailwind", "result_image_data_url"
+    )
+    assert tailwind_prompt[0]["content"] == TAILWIND_SYSTEM_PROMPT
 
-def assemble_prompt(
-    image_data_url, generated_code_config: str, result_image_data_url=None
-):
-    # Set the system prompt based on the output settings
-    system_content = TAILWIND_SYSTEM_PROMPT
-    if generated_code_config == "html_tailwind":
-        system_content = TAILWIND_SYSTEM_PROMPT
-    elif generated_code_config == "react_tailwind":
-        system_content = REACT_TAILWIND_SYSTEM_PROMPT
-    elif generated_code_config == "bootstrap":
-        system_content = BOOTSTRAP_SYSTEM_PROMPT
-    elif generated_code_config == "ionic_tailwind":
-        system_content = IONIC_TAILWIND_SYSTEM_PROMPT
-    else:
-        raise Exception("Code config is not one of available options")
+    react_tailwind_prompt = assemble_prompt(
+        "image_data_url", "react_tailwind", "result_image_data_url"
+    )
+    assert react_tailwind_prompt[0]["content"] == REACT_TAILWIND_SYSTEM_PROMPT
 
-    user_content = [
-        {
-            "type": "image_url",
-            "image_url": {"url": image_data_url, "detail": "high"},
-        },
-        {
-            "type": "text",
-            "text": USER_PROMPT,
-        },
-    ]
+    bootstrap_prompt = assemble_prompt(
+        "image_data_url", "bootstrap", "result_image_data_url"
+    )
+    assert bootstrap_prompt[0]["content"] == BOOTSTRAP_SYSTEM_PROMPT
 
-    # Include the result image if it exists
-    if result_image_data_url:
-        user_content.insert(
-            1,
-            {
-                "type": "image_url",
-                "image_url": {"url": result_image_data_url, "detail": "high"},
-            },
-        )
-    return [
-        {
-            "role": "system",
-            "content": system_content,
-        },
-        {
-            "role": "user",
-            "content": user_content,
-        },
-    ]
+    ionic_tailwind = assemble_prompt(
+        "image_data_url", "ionic_tailwind", "result_image_data_url"
+    )
+    assert ionic_tailwind[0]["content"] == IONIC_TAILWIND_SYSTEM_PROMPT
