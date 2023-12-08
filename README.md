@@ -12,6 +12,7 @@ See the [Examples](#-examples) section below for more demos.
 
 ## 🌟 Recent Updates
 
+- Dec 7 - 🔥 🔥 🔥 View a history of your edits, and branch off them
 - Nov 30 - Dark mode, output code in Ionic (thanks [@dialmedu](https://github.com/dialmedu)), set OpenAI base URL
 - Nov 28 - 🔥 🔥 🔥 Customize your stack: React or Bootstrap or TailwindCSS
 - Nov 23 - Send in a screenshot of the current replicated version (sometimes improves quality of subsequent generations)
@@ -53,6 +54,10 @@ For debugging purposes, if you don't want to waste GPT4-Vision credits, you can 
 ```bash
 MOCK=true poetry run uvicorn main:app --reload --port 7001
 ```
+
+## Configuration
+
+* You can configure the OpenAI base URL if you need to use a proxy: Set OPENAI_BASE_URL in the `backend/.env` or directly in the UI in the settings dialog
 
 ## Docker
 

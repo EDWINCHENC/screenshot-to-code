@@ -1,6 +1,7 @@
 # Load environment variables first
 from dotenv import load_dotenv
 
+
 load_dotenv()
 
 
@@ -10,16 +11,17 @@ import traceback
 from datetime import datetime
 from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
+import openai
 from llm import stream_openai_response
 from mock import mock_completion
+from utils import pprint_prompt
 from image_generation import create_alt_url_mapping, generate_images
 from prompts import assemble_prompt
 from routes import screenshot
 from access_token import validate_access_token
 
 app = FastAPI(openapi_url=None, docs_url=None, redoc_url=None)
-
-# Configure CORS
 
 # Configure CORS settings
 app.add_middleware(
@@ -36,8 +38,19 @@ app.add_middleware(
 # TODO: Should only be set to true when value is 'True', not any abitrary truthy value
 SHOULD_MOCK_AI_RESPONSE = bool(os.environ.get("MOCK", False))
 
+# Set to True when running in production (on the hosted version)
+# Used as a feature flag to enable or disable certain features
+IS_PROD = os.environ.get("IS_PROD", False)
+
 
 app.include_router(screenshot.router)
+
+
+@app.get("/")
+async def get_status():
+    return HTMLResponse(
+        content="<h3>Your backend is running correctly. Please open the front-end URL (default is http://localhost:5173) to use screenshot-to-code.</h3>"
+    )
 
 
 def write_logs(prompt_messages, completion):
@@ -65,6 +78,12 @@ async def stream_code(websocket: WebSocket):
 
     print("Incoming websocket connection...")
 
+    async def throw_error(
+        message: str,
+    ):
+        await websocket.send_json({"type": "error", "value": message})
+        await websocket.close()
+
     params = await websocket.receive_json()
 
     print("Received params")
@@ -80,13 +99,14 @@ async def stream_code(websocket: WebSocket):
     openai_api_key = None
     if "accessCode" in params and params["accessCode"]:
         print("Access code - using platform API key")
-        if await validate_access_token(params["accessCode"]):
+        res = await validate_access_token(params["accessCode"])
+        if res["success"]:
             openai_api_key = os.environ.get("PLATFORM_OPENAI_API_KEY")
         else:
             await websocket.send_json(
                 {
                     "type": "error",
-                    "value": "Invalid access code or you're out of credits. Please try again.",
+                    "value": res["failure_reason"],
                 }
             )
             return
@@ -165,18 +185,52 @@ async def stream_code(websocket: WebSocket):
             prompt_messages += [
                 {"role": "assistant" if index % 2 == 0 else "user", "content": text}
             ]
-
         image_cache = create_alt_url_mapping(params["history"][-2])
 
     if SHOULD_MOCK_AI_RESPONSE:
         completion = await mock_completion(process_chunk)
     else:
-        completion = await stream_openai_response(
-            prompt_messages,
-            api_key=openai_api_key,
-            base_url=openai_base_url,
-            callback=lambda x: process_chunk(x),
-        )
+        try:
+            completion = await stream_openai_response(
+                prompt_messages,
+                api_key=openai_api_key,
+                base_url=openai_base_url,
+                callback=lambda x: process_chunk(x),
+            )
+        except openai.AuthenticationError as e:
+            print("[GENERATE_CODE] Authentication failed", e)
+            error_message = (
+                "Incorrect OpenAI key. Please make sure your OpenAI API key is correct, or create a new OpenAI API key on your OpenAI dashboard."
+                + (
+                    " Alternatively, you can purchase code generation credits directly on this website."
+                    if IS_PROD
+                    else ""
+                )
+            )
+            return await throw_error(error_message)
+        except openai.NotFoundError as e:
+            print("[GENERATE_CODE] Model not found", e)
+            error_message = (
+                e.message
+                + ". Please make sure you have followed the instructions correctly to obtain an OpenAI key with GPT vision access: https://github.com/abi/screenshot-to-code/blob/main/Troubleshooting.md"
+                + (
+                    " Alternatively, you can purchase code generation credits directly on this website."
+                    if IS_PROD
+                    else ""
+                )
+            )
+            return await throw_error(error_message)
+        except openai.RateLimitError as e:
+            print("[GENERATE_CODE] Rate limit exceeded", e)
+            error_message = (
+                "OpenAI error - 'You exceeded your current quota, please check your plan and billing details.'"
+                + (
+                    " Alternatively, you can purchase code generation credits directly on this website."
+                    if IS_PROD
+                    else ""
+                )
+            )
+            return await throw_error(error_message)
 
     # Write the messages dict into a log so that we can debug later
     write_logs(prompt_messages, completion)
@@ -204,5 +258,5 @@ async def stream_code(websocket: WebSocket):
         await websocket.send_json(
             {"type": "status", "value": "Image generation failed but code is complete."}
         )
-    finally:
-        await websocket.close()
+
+    await websocket.close()
